@@ -1,0 +1,2 @@
+# Enterprise-Leave-Management-System
+A production-grade HR Leave Management System built with ASP.NET Core using Clean Architecture, CQRS, and Blazor UI.   Features include employee leave requests, approval workflows, JWT authentication, idempotent API design, transactional consistency, and a modern dashboard interface.   Designed with scalability, maintainability, and real-world enterprise patterns in mind (Repository, Unit of Work, Validation, and Event-driven flows).
