@@ -1,0 +1,151 @@
+@page "/create-leave"
+@inject ApiService Api
+@inject NavigationManager Nav
+@using LeaveFlow.BlazorUI.Services
+@using LeaveFlow.Application.DTOs
+@using LeaveFlow.Domain.Enums
+
+<div class="lf-page-header">
+    <div class="lf-page-title">Request Leave</div>
+    <div class="lf-page-sub">Submit a new leave request</div>
+</div>
+
+<div class="lf-grid-2" style="align-items:start">
+    <!-- Form -->
+    <div class="lf-card">
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="lf-alert lf-alert-error">@_error</div>
+        }
+        @if (_success)
+        {
+            <div class="lf-alert lf-alert-success">
+                ✅ Leave request submitted successfully!
+                <a href="/my-leaves" style="margin-left:8px;font-weight:600">View My Leaves →</a>
+            </div>
+        }
+
+        <div class="lf-form-group">
+            <label class="lf-label">Leave Type</label>
+            <select class="lf-select" @bind="_leaveType" @bind:after="LoadBalance">
+                @foreach (var t in Enum.GetValues<LeaveType>())
+                {
+                    <option value="@t">@t</option>
+                }
+            </select>
+        </div>
+
+        <div class="lf-grid-2">
+            <div class="lf-form-group">
+                <label class="lf-label">Start Date</label>
+                <input class="lf-input" type="date" @bind="_startDate" @bind:after="CalcDays"
+                       min="@DateTime.Today.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="lf-form-group">
+                <label class="lf-label">End Date</label>
+                <input class="lf-input" type="date" @bind="_endDate" @bind:after="CalcDays"
+                       min="@_startDate.ToString("yyyy-MM-dd")" />
+            </div>
+        </div>
+
+        @if (_dateError is not null)
+        {
+            <div class="lf-error-msg lf-mb-4">@_dateError</div>
+        }
+
+        <div class="lf-form-group">
+            <label class="lf-label">Comments <span style="color:var(--gray-400)">(optional)</span></label>
+            <textarea class="lf-textarea" placeholder="Reason for leave…" @bind="_comments"></textarea>
+        </div>
+
+        <!-- Summary box -->
+        @if (_days > 0)
+        {
+            <div class="lf-alert lf-alert-info" style="margin-bottom:16px">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:16px;height:16px;flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span>Requesting <strong>@_days day@(_days > 1 ? "s" : "")</strong> of @_leaveType leave.
+                    Balance after: <strong>@(_selectedBalance?.RemainingDays - _days) days</strong></span>
+            </div>
+        }
+
+        <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px"
+                @onclick="SubmitAsync" disabled="@(_submitting || _dateError != null || _days < 1)">
+            @(_submitting ? "Submitting…" : "Submit Leave Request")
+        </button>
+    </div>
+
+    <!-- Balance sidebar -->
+    <div class="lf-card">
+        <div class="lf-card-header">
+            <div class="lf-card-title">Your Leave Balances</div>
+        </div>
+        @if (_loadingBalances)
+        {
+            <div class="lf-spinner"><div class="lf-spinner-ring"></div></div>
+        }
+        else
+        {
+            <div class="lf-balance-grid">
+                @foreach (var b in _balances)
+                {
+                    var pct = b.TotalDays > 0 ? (int)((double)b.UsedDays / b.TotalDays * 100) : 0;
+                    var active = b.LeaveType == _leaveType;
+                    <div class="lf-balance-item" style="@(active ? "border-color:var(--primary);background:var(--primary-light)" : "")">
+                        <div class="lf-balance-type">@b.LeaveType</div>
+                        <div class="lf-balance-days" style="@(active ? "color:var(--primary-dark)" : "")">@b.RemainingDays</div>
+                        <div class="lf-balance-sub">@b.UsedDays used of @b.TotalDays</div>
+                        <div class="lf-progress"><div class="lf-progress-bar" style="width:@pct%"></div></div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    LeaveType _leaveType = LeaveType.Vacation;
+    DateTime _startDate = DateTime.Today;
+    DateTime _endDate   = DateTime.Today;
+    string? _comments, _error, _dateError;
+    bool _submitting, _success, _loadingBalances = true;
+    int _days;
+    List<LeaveBalanceDto> _balances = [];
+    LeaveBalanceDto? _selectedBalance;
+
+    protected override async Task OnAfterRenderAsync(bool first)
+    {
+        if (!first) return;
+        _balances = await Api.GetBalancesAsync();
+        _loadingBalances = false;
+        LoadBalance();
+        StateHasChanged();
+    }
+
+    void LoadBalance()
+    {
+        _selectedBalance = _balances.FirstOrDefault(b => b.LeaveType == _leaveType);
+        CalcDays();
+    }
+
+    void CalcDays()
+    {
+        _dateError = null;
+        if (_endDate < _startDate) { _dateError = "End date must be on or after start date."; _days = 0; return; }
+        _days = (_endDate - _startDate).Days + 1;
+        if (_selectedBalance is not null && _days > _selectedBalance.RemainingDays)
+            _dateError = $"Insufficient balance. You have {_selectedBalance.RemainingDays} days remaining.";
+    }
+
+    async Task SubmitAsync()
+    {
+        _submitting = true; _error = null;
+        var dto = new CreateLeaveRequestDto(
+            DateOnly.FromDateTime(_startDate),
+            DateOnly.FromDateTime(_endDate),
+            _leaveType, _comments);
+        var (ok, err) = await Api.CreateLeaveRequestAsync(dto);
+        if (ok) { _success = true; _balances = await Api.GetBalancesAsync(); LoadBalance(); }
+        else    { _error = err; }
+        _submitting = false;
+    }
+}

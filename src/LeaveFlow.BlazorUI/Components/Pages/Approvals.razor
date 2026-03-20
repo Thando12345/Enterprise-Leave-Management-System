@@ -1,0 +1,129 @@
+@page "/approvals"
+@inject ApiService Api
+@using LeaveFlow.BlazorUI.Services
+@using LeaveFlow.Application.DTOs
+@using LeaveFlow.Domain.Enums
+
+<div class="lf-page-header">
+    <div class="lf-page-title">Team Approvals</div>
+    <div class="lf-page-sub">Review and action pending leave requests from your team</div>
+</div>
+
+@if (!string.IsNullOrEmpty(_toast))
+{
+    <div class="lf-alert @(_toastOk ? "lf-alert-success" : "lf-alert-error")">@_toast</div>
+}
+
+<div class="lf-card">
+    <div class="lf-card-header">
+        <div class="lf-card-title">Pending Requests <span class="badge badge-pending" style="margin-left:8px">@_requests.Count</span></div>
+        <button class="btn btn-secondary btn-sm" @onclick="LoadAsync">↻ Refresh</button>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="lf-spinner"><div class="lf-spinner-ring"></div></div>
+    }
+    else if (!_requests.Any())
+    {
+        <div class="lf-empty">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <p>No pending requests — all caught up!</p>
+        </div>
+    }
+    else
+    {
+        <div class="lf-table-wrap">
+            <table class="lf-table">
+                <thead>
+                    <tr><th>Employee</th><th>Type</th><th>Start</th><th>End</th><th>Days</th><th>Requested</th><th>Actions</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in _requests)
+                    {
+                        <tr>
+                            <td><strong>@r.EmployeeName</strong></td>
+                            <td>@r.LeaveType</td>
+                            <td>@r.StartDate.ToString("MMM d, yyyy")</td>
+                            <td>@r.EndDate.ToString("MMM d, yyyy")</td>
+                            <td>@r.TotalDays</td>
+                            <td style="font-size:12px;color:var(--gray-400)">@r.RequestDate.ToString("MMM d")</td>
+                            <td>
+                                <div class="lf-flex lf-gap-2">
+                                    <button class="btn btn-success btn-sm" @onclick="() => OpenModal(r, true)">✓ Approve</button>
+                                    <button class="btn btn-danger btn-sm"  @onclick="() => OpenModal(r, false)">✗ Reject</button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<!-- Review Modal -->
+@if (_modalRequest is not null)
+{
+    <div class="lf-modal-backdrop" @onclick="CloseModal">
+        <div class="lf-modal" @onclick:stopPropagation>
+            <div class="lf-modal-title">
+                @(_approving ? "✓ Approve" : "✗ Reject") Leave Request
+            </div>
+            <div style="margin-bottom:16px;font-size:13px;color:var(--gray-600)">
+                <strong>@_modalRequest.EmployeeName</strong> — @_modalRequest.LeaveType,
+                @_modalRequest.StartDate.ToString("MMM d") to @_modalRequest.EndDate.ToString("MMM d")
+                (@_modalRequest.TotalDays days)
+            </div>
+            <div class="lf-form-group">
+                <label class="lf-label">Comment <span style="color:var(--gray-400)">(optional)</span></label>
+                <textarea class="lf-textarea" placeholder="Add a comment…" @bind="_comment"></textarea>
+            </div>
+            <div class="lf-modal-actions">
+                <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                <button class="btn @(_approving ? "btn-success" : "btn-danger")"
+                        @onclick="ConfirmReviewAsync" disabled="@_reviewing">
+                    @(_reviewing ? "Processing…" : (_approving ? "Confirm Approve" : "Confirm Reject"))
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    bool _loading = true, _reviewing;
+    bool _toastOk;
+    string? _toast, _comment;
+    bool _approving;
+    List<LeaveRequestDto> _requests = [];
+    LeaveRequestDto? _modalRequest;
+
+    protected override async Task OnAfterRenderAsync(bool first)
+    {
+        if (!first) return;
+        await LoadAsync();
+    }
+
+    async Task LoadAsync()
+    {
+        _loading = true; StateHasChanged();
+        _requests = await Api.GetPendingRequestsAsync();
+        _loading = false; StateHasChanged();
+    }
+
+    void OpenModal(LeaveRequestDto r, bool approve) { _modalRequest = r; _approving = approve; _comment = null; }
+    void CloseModal() => _modalRequest = null;
+
+    async Task ConfirmReviewAsync()
+    {
+        if (_modalRequest is null) return;
+        _reviewing = true;
+        var dto = new ReviewLeaveRequestDto(_approving, _comment);
+        var (ok, err) = await Api.ReviewLeaveRequestAsync(_modalRequest.Id, dto);
+        _toast   = ok ? $"Request {(_approving ? "approved" : "rejected")} successfully." : err;
+        _toastOk = ok;
+        _reviewing = false;
+        CloseModal();
+        if (ok) await LoadAsync();
+    }
+}

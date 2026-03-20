@@ -1,0 +1,81 @@
+@page "/admin/audit-logs"
+@inject ApiService Api
+@using LeaveFlow.BlazorUI.Services
+@using LeaveFlow.Domain.Entities
+
+<div class="lf-page-header">
+    <div class="lf-page-title">Audit Logs</div>
+    <div class="lf-page-sub">System-wide activity trail</div>
+</div>
+
+<div class="lf-card">
+    <div class="lf-card-header">
+        <div class="lf-card-title">Activity Log</div>
+        <div class="lf-flex lf-gap-2">
+            <select class="lf-select" style="width:80px" @bind="_pageSize" @bind:after="LoadAsync">
+                <option value="10">10</option>
+                <option value="20">20</option>
+                <option value="50">50</option>
+            </select>
+            <button class="btn btn-secondary btn-sm" @onclick="LoadAsync">↻ Refresh</button>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="lf-spinner"><div class="lf-spinner-ring"></div></div>
+    }
+    else if (!_logs.Any())
+    {
+        <div class="lf-empty"><p>No audit logs found.</p></div>
+    }
+    else
+    {
+        <div class="lf-table-wrap">
+            <table class="lf-table">
+                <thead><tr><th>#</th><th>User ID</th><th>Action</th><th>Timestamp</th><th>Details</th></tr></thead>
+                <tbody>
+                    @foreach (var log in _logs)
+                    {
+                        <tr>
+                            <td style="color:var(--gray-400);font-size:12px">@log.Id</td>
+                            <td>@log.UserId</td>
+                            <td><span class="badge badge-employee">@log.Action</span></td>
+                            <td style="font-size:12px;color:var(--gray-400)">@log.Timestamp.ToString("MMM d, yyyy HH:mm")</td>
+                            <td style="font-size:12px;color:var(--gray-600);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">@log.Details</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="lf-flex lf-gap-2 lf-mt-4" style="justify-content:flex-end;align-items:center">
+            <button class="btn btn-secondary btn-sm" @onclick="PrevPage" disabled="@(_page <= 1)">← Prev</button>
+            <span style="font-size:13px;color:var(--gray-600)">Page @_page</span>
+            <button class="btn btn-secondary btn-sm" @onclick="NextPage" disabled="@(_logs.Count < _pageSize)">Next →</button>
+        </div>
+    }
+</div>
+
+@code {
+    bool _loading = true;
+    int _page = 1, _pageSize = 20;
+    List<AuditLog> _logs = [];
+
+    protected override async Task OnAfterRenderAsync(bool first)
+    {
+        if (!first) return;
+        await LoadAsync();
+    }
+
+    async Task LoadAsync()
+    {
+        _loading = true; StateHasChanged();
+        _logs = await Api.GetAuditLogsAsync(_page, _pageSize);
+        _loading = false; StateHasChanged();
+    }
+
+    async Task PrevPage() { if (_page > 1) { _page--; await LoadAsync(); } }
+    async Task NextPage() { _page++; await LoadAsync(); }
+}

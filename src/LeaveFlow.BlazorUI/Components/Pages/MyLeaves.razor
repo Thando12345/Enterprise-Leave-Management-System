@@ -1,0 +1,123 @@
+@page "/my-leaves"
+@inject ApiService Api
+@using LeaveFlow.BlazorUI.Services
+@using LeaveFlow.Application.DTOs
+@using LeaveFlow.Domain.Enums
+
+<div class="lf-page-header">
+    <div class="lf-page-title">My Leave Requests</div>
+    <div class="lf-page-sub">View and manage all your leave requests</div>
+</div>
+
+@if (!string.IsNullOrEmpty(_toast))
+{
+    <div class="lf-alert @(_toastOk ? "lf-alert-success" : "lf-alert-error")">@_toast</div>
+}
+
+<div class="lf-card">
+    <div class="lf-card-header">
+        <div class="lf-flex lf-gap-2" style="flex-wrap:wrap">
+            <select class="lf-select" style="width:140px" @bind="_filterStatus">
+                <option value="">All Status</option>
+                <option value="Pending">Pending</option>
+                <option value="Approved">Approved</option>
+                <option value="Rejected">Rejected</option>
+                <option value="Canceled">Canceled</option>
+            </select>
+            <select class="lf-select" style="width:140px" @bind="_filterType">
+                <option value="">All Types</option>
+                @foreach (var t in Enum.GetValues<LeaveType>())
+                {
+                    <option value="@t">@t</option>
+                }
+            </select>
+        </div>
+        <a href="/create-leave" class="btn btn-primary btn-sm">+ New Request</a>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="lf-spinner"><div class="lf-spinner-ring"></div></div>
+    }
+    else if (!Filtered.Any())
+    {
+        <div class="lf-empty">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+            <p>No leave requests found</p>
+        </div>
+    }
+    else
+    {
+        <div class="lf-table-wrap">
+            <table class="lf-table">
+                <thead>
+                    <tr>
+                        <th>Type</th><th>Start</th><th>End</th><th>Days</th>
+                        <th>Requested</th><th>Status</th><th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in Filtered)
+                    {
+                        <tr>
+                            <td><strong>@r.LeaveType</strong></td>
+                            <td>@r.StartDate.ToString("MMM d, yyyy")</td>
+                            <td>@r.EndDate.ToString("MMM d, yyyy")</td>
+                            <td>@r.TotalDays</td>
+                            <td style="font-size:12px;color:var(--gray-400)">@r.RequestDate.ToString("MMM d, yyyy")</td>
+                            <td><span class="badge @StatusBadge(r.Status)">@r.Status</span></td>
+                            <td>
+                                @if (r.Status == LeaveStatus.Pending)
+                                {
+                                    <button class="btn btn-danger btn-sm" @onclick="() => CancelAsync(r.Id)" disabled="@_canceling">
+                                        Cancel
+                                    </button>
+                                }
+                                else
+                                {
+                                    <span style="font-size:12px;color:var(--gray-400)">—</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    bool _loading = true, _canceling;
+    string _filterStatus = "", _filterType = "";
+    string? _toast; bool _toastOk;
+    List<LeaveRequestDto> _all = [];
+
+    IEnumerable<LeaveRequestDto> Filtered => _all
+        .Where(r => string.IsNullOrEmpty(_filterStatus) || r.Status.ToString() == _filterStatus)
+        .Where(r => string.IsNullOrEmpty(_filterType)   || r.LeaveType.ToString() == _filterType);
+
+    protected override async Task OnAfterRenderAsync(bool first)
+    {
+        if (!first) return;
+        _all = await Api.GetMyRequestsAsync();
+        _loading = false;
+        StateHasChanged();
+    }
+
+    async Task CancelAsync(int id)
+    {
+        _canceling = true;
+        var (ok, err) = await Api.CancelLeaveRequestAsync(id);
+        if (ok) { _toast = "Request canceled successfully."; _toastOk = true; _all = await Api.GetMyRequestsAsync(); }
+        else    { _toast = err; _toastOk = false; }
+        _canceling = false;
+    }
+
+    static string StatusBadge(LeaveStatus s) => s switch
+    {
+        LeaveStatus.Approved => "badge-approved",
+        LeaveStatus.Rejected => "badge-rejected",
+        LeaveStatus.Canceled => "badge-canceled",
+        _                    => "badge-pending"
+    };
+}

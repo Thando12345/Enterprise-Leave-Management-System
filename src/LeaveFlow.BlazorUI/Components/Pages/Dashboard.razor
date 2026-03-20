@@ -1,0 +1,150 @@
+@page "/"
+@inject ApiService Api
+@inject AuthService Auth
+@using LeaveFlow.BlazorUI.Services
+@using LeaveFlow.Application.DTOs
+@using LeaveFlow.Domain.Enums
+
+<div class="lf-page-header">
+    <div class="lf-page-title">Welcome back, @_fullName 👋</div>
+    <div class="lf-page-sub">Here's what's happening with your leave today.</div>
+</div>
+
+@if (_loading)
+{
+    <div class="lf-spinner"><div class="lf-spinner-ring"></div></div>
+}
+else
+{
+    <!-- Stat Cards -->
+    <div class="lf-stats">
+        <div class="lf-stat">
+            <div class="lf-stat-icon blue">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            </div>
+            <div>
+                <div class="lf-stat-val">@_vacationRemaining</div>
+                <div class="lf-stat-label">Vacation Days Left</div>
+            </div>
+        </div>
+        <div class="lf-stat">
+            <div class="lf-stat-icon teal">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+            </div>
+            <div>
+                <div class="lf-stat-val">@_sickRemaining</div>
+                <div class="lf-stat-label">Sick Days Left</div>
+            </div>
+        </div>
+        <div class="lf-stat">
+            <div class="lf-stat-icon yellow">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <div>
+                <div class="lf-stat-val">@_pendingCount</div>
+                <div class="lf-stat-label">Pending Requests</div>
+            </div>
+        </div>
+        <div class="lf-stat">
+            <div class="lf-stat-icon green">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <div>
+                <div class="lf-stat-val">@_approvedCount</div>
+                <div class="lf-stat-label">Approved This Year</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="lf-grid-2">
+        <!-- Leave Balances -->
+        <div class="lf-card">
+            <div class="lf-card-header">
+                <div>
+                    <div class="lf-card-title">Leave Balances</div>
+                    <div class="lf-card-subtitle">@DateTime.UtcNow.Year allocation</div>
+                </div>
+                <a href="/create-leave" class="btn btn-primary btn-sm">+ Request</a>
+            </div>
+            <div class="lf-balance-grid">
+                @foreach (var b in _balances)
+                {
+                    var pct = b.TotalDays > 0 ? (int)((double)b.UsedDays / b.TotalDays * 100) : 0;
+                    <div class="lf-balance-item">
+                        <div class="lf-balance-type">@b.LeaveType</div>
+                        <div class="lf-balance-days">@b.RemainingDays</div>
+                        <div class="lf-balance-sub">@b.UsedDays used of @b.TotalDays days</div>
+                        <div class="lf-progress"><div class="lf-progress-bar" style="width:@pct%"></div></div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Recent Requests -->
+        <div class="lf-card">
+            <div class="lf-card-header">
+                <div>
+                    <div class="lf-card-title">Recent Requests</div>
+                    <div class="lf-card-subtitle">Your last 5 leave requests</div>
+                </div>
+                <a href="/my-leaves" class="btn btn-secondary btn-sm">View All</a>
+            </div>
+            @if (!_requests.Any())
+            {
+                <div class="lf-empty">
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                    <p>No leave requests yet</p>
+                </div>
+            }
+            else
+            {
+                <div class="lf-table-wrap">
+                    <table class="lf-table">
+                        <thead><tr><th>Type</th><th>Dates</th><th>Days</th><th>Status</th></tr></thead>
+                        <tbody>
+                            @foreach (var r in _requests.Take(5))
+                            {
+                                <tr>
+                                    <td>@r.LeaveType</td>
+                                    <td style="font-size:12px">@r.StartDate.ToString("MMM d") – @r.EndDate.ToString("MMM d")</td>
+                                    <td>@r.TotalDays</td>
+                                    <td><span class="badge @StatusBadge(r.Status)">@r.Status</span></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    bool _loading = true;
+    string _fullName = "User";
+    List<LeaveBalanceDto> _balances = [];
+    List<LeaveRequestDto> _requests = [];
+    int _vacationRemaining, _sickRemaining, _pendingCount, _approvedCount;
+
+    protected override async Task OnAfterRenderAsync(bool first)
+    {
+        if (!first) return;
+        _fullName = await Auth.GetFullNameAsync();
+        _balances = await Api.GetBalancesAsync();
+        _requests = await Api.GetMyRequestsAsync();
+        _vacationRemaining = _balances.FirstOrDefault(b => b.LeaveType == LeaveType.Vacation)?.RemainingDays ?? 0;
+        _sickRemaining     = _balances.FirstOrDefault(b => b.LeaveType == LeaveType.Sick)?.RemainingDays ?? 0;
+        _pendingCount      = _requests.Count(r => r.Status == LeaveStatus.Pending);
+        _approvedCount     = _requests.Count(r => r.Status == LeaveStatus.Approved);
+        _loading = false;
+        StateHasChanged();
+    }
+
+    static string StatusBadge(LeaveStatus s) => s switch
+    {
+        LeaveStatus.Approved => "badge-approved",
+        LeaveStatus.Rejected => "badge-rejected",
+        LeaveStatus.Canceled => "badge-canceled",
+        _                    => "badge-pending"
+    };
+}

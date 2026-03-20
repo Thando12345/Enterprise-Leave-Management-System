@@ -1,0 +1,47 @@
+@inherits LayoutComponentBase
+@inject AuthService Auth
+@inject NavigationManager Nav
+@using LeaveFlow.BlazorUI.Services
+
+@if (!_checked)
+{
+    <div class="lf-spinner"><div class="lf-spinner-ring"></div></div>
+}
+else if (!_authenticated)
+{
+    @Body
+}
+else
+{
+    <div class="lf-shell">
+        <NavMenu Role="@_role" />
+        <div class="lf-main">
+            <TopBar FullName="@_fullName" Role="@_role" />
+            <div class="lf-content">
+                @Body
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    bool _checked, _authenticated;
+    string _role = "Employee", _fullName = "User";
+
+    protected override async Task OnAfterRenderAsync(bool first)
+    {
+        if (!first) return;
+        _authenticated = await Auth.IsAuthenticatedAsync();
+        if (_authenticated)
+        {
+            _role     = await Auth.GetRoleAsync();
+            _fullName = await Auth.GetFullNameAsync();
+        }
+        else if (!Nav.Uri.Contains("/login"))
+        {
+            Nav.NavigateTo("/login");
+        }
+        _checked = true;
+        StateHasChanged();
+    }
+}
