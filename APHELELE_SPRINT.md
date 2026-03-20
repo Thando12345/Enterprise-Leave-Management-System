@@ -1,4 +1,4 @@
-# Aphelele – Developer Onboarding, Sprint Map & Implementation Guide
+# Aphelele – Developer Onboarding & Sprint Map
 
 > **Branch:** `feature/aphelele`
 > **Role:** Full-Stack .NET Developer
@@ -6,11 +6,34 @@
 
 ---
 
+## What's Already Built (Do Not Rebuild)
+
+The following is **fully implemented and committed** on both `main` and `feature/aphelele`:
+
+### Backend — `LeaveFlow.API` + `LeaveFlow.Application` + `LeaveFlow.Infrastructure` + `LeaveFlow.Domain`
+- ✅ All 5 domain entities + enums
+- ✅ All CQRS handlers: Login, CreateLeave, ReviewLeave, CancelLeave
+- ✅ All queries: GetMyRequests, GetPendingTeam, GetBalances
+- ✅ All repositories + UnitOfWork
+- ✅ JWT service, Email service (MailKit), Password hasher (BCrypt)
+- ✅ All 8 API endpoints wired and working
+- ✅ Swagger with Bearer auth at `https://localhost:5001/swagger`
+- ✅ CORS configured for `https://localhost:5002`
+- ✅ Serilog structured logging
+
+### Frontend — `LeaveFlow.BlazorUI`
+- ✅ Full Blazor Server project at `https://localhost:5002`
+- ✅ Layout: MainLayout (auth guard), NavMenu (role-filtered), TopBar, EmptyLayout
+- ✅ Pages: Login, Dashboard, MyLeaves, CreateLeave, Approvals, Admin/Users, Admin/AuditLogs, Profile
+- ✅ Services: ApiService (all 8 endpoints), AuthService (JWT + LocalStorage)
+- ✅ Full design system in `wwwroot/app.css` (blue/teal theme, Inter font)
+- ✅ Added to `LeaveFlow.sln`
+
+---
+
 ## 1. First-Time Setup (Do This Once)
 
 ### 1.1 Prerequisites
-
-Install these before anything else:
 
 | Tool | Download |
 |------|----------|
@@ -19,115 +42,28 @@ Install these before anything else:
 | SQL Server Management Studio (SSMS) | https://aka.ms/ssmsfullsetup |
 | Visual Studio 2022 (Community is free) | https://visualstudio.microsoft.com/ |
 | Git | https://git-scm.com/downloads |
-| Node.js (optional, for tooling) | https://nodejs.org |
 
 ---
 
-### 1.2 Clone the Repository
+### 1.2 Clone & Checkout Your Branch
 
 ```bash
 git clone https://github.com/Thando12345/Enterprise-Leave-Management-System.git
 cd Enterprise-Leave-Management-System
-```
-
----
-
-### 1.3 Checkout Your Branch
-
-```bash
 git checkout feature/aphelele
 ```
 
 ---
 
-### 1.4 Configure the Database
+### 1.3 Configure the Database
 
-Open `src/LeaveFlow.API/appsettings.json` and update the connection string:
+Edit `src/LeaveFlow.API/appsettings.json`:
 
 ```json
 {
   "ConnectionStrings": {
     "DefaultConnection": "Server=(localdb)\\mssqllocaldb;Database=LeaveFlowDB;Trusted_Connection=True;"
-  }
-}
-```
-
-> If you're using a named SQL Server instance instead of LocalDB, replace with:
-> `"Server=YOUR_PC_NAME\\SQLEXPRESS;Database=LeaveFlowDB;Trusted_Connection=True;TrustServerCertificate=True;"`
-
----
-
-### 1.5 Apply EF Core Migrations (Creates the Database)
-
-Run these commands from the repo root:
-
-```bash
-cd src/LeaveFlow.Infrastructure
-
-dotnet ef migrations add InitialCreate --startup-project ../LeaveFlow.API
-
-dotnet ef database update --startup-project ../LeaveFlow.API
-```
-
-This will:
-- Create the `LeaveFlowDB` database automatically
-- Create all tables: `Users`, `LeaveRequests`, `LeaveBalances`, `AuditLogs`, `IdempotencyKeys`
-
-> **Verify in SSMS:** Connect to `(localdb)\mssqllocaldb` → expand Databases → you should see `LeaveFlowDB`
-
----
-
-### 1.6 Seed Test Data (Manual SQL — run in SSMS)
-
-```sql
-USE LeaveFlowDB;
-
--- Admin user (password: Admin@123)
-INSERT INTO Users (Email, PasswordHash, FirstName, LastName, Role, TeamId)
-VALUES (
-  'admin@leaveflow.com',
-  '$2a$11$examplehashforadmin000000000000000000000000000000000',
-  'Admin', 'User', 2, NULL
-);
-
--- Manager (password: Manager@123)
-INSERT INTO Users (Email, PasswordHash, FirstName, LastName, Role, TeamId)
-VALUES (
-  'manager@leaveflow.com',
-  '$2a$11$examplehashformanager00000000000000000000000000000000',
-  'Jane', 'Manager', 1, 1
-);
-
--- Employee (password: Employee@123)
-INSERT INTO Users (Email, PasswordHash, FirstName, LastName, Role, TeamId)
-VALUES (
-  'employee@leaveflow.com',
-  '$2a$11$examplehashforemployee0000000000000000000000000000000',
-  'John', 'Employee', 0, 1
-);
-
--- Leave balances for employee (UserId = 3, adjust if different)
-INSERT INTO LeaveBalances (EmployeeId, LeaveType, TotalDays, UsedDays, Year)
-VALUES
-  (3, 0, 20, 0, 2025),  -- Vacation
-  (3, 1, 10, 0, 2025),  -- Sick
-  (3, 2, 5,  0, 2025);  -- Personal
-```
-
-> **Note:** Replace the `PasswordHash` values with real BCrypt hashes.
-> Generate them with this small C# snippet or use an online BCrypt tool:
-> ```csharp
-> Console.WriteLine(BCrypt.Net.BCrypt.HashPassword("Admin@123"));
-> ```
-
----
-
-### 1.7 Configure JWT & Email
-
-In `src/LeaveFlow.API/appsettings.json`:
-
-```json
-{
+  },
   "Jwt": {
     "Secret": "LeaveFlow_SuperSecret_Key_32Chars!!",
     "Issuer": "LeaveFlow.API",
@@ -146,212 +82,243 @@ In `src/LeaveFlow.API/appsettings.json`:
 }
 ```
 
-> For local dev, you can disable email sending by wrapping `EmailService.SendAsync` in a try/catch and logging instead of throwing.
+> For SQL Server Express instead of LocalDB:
+> `"Server=.\\SQLEXPRESS;Database=LeaveFlowDB;Trusted_Connection=True;TrustServerCertificate=True;"`
 
 ---
 
-### 1.8 Run the API
+### 1.4 Apply EF Core Migrations
 
 ```bash
-cd src/LeaveFlow.API
-dotnet run
+dotnet tool install --global dotnet-ef
+
+cd src/LeaveFlow.Infrastructure
+dotnet ef migrations add InitialCreate --startup-project ../LeaveFlow.API
+dotnet ef database update --startup-project ../LeaveFlow.API
 ```
 
-Open Swagger: **https://localhost:5001/swagger**
-
-Test login:
-```json
-POST /api/auth/login
-{
-  "email": "admin@leaveflow.com",
-  "password": "Admin@123"
-}
-```
-
-Copy the `accessToken` from the response → click **Authorize** in Swagger → paste `Bearer <token>`.
+Verify in SSMS: connect to `(localdb)\mssqllocaldb` → `LeaveFlowDB` → Tables should show:
+`Users`, `LeaveRequests`, `LeaveBalances`, `AuditLogs`, `IdempotencyKeys`
 
 ---
 
-## 2. Project Structure (Your Working Files)
+### 1.5 Seed Test Data
+
+Generate real BCrypt hashes first (run in any .NET console app or LINQPad):
+
+```csharp
+Console.WriteLine(BCrypt.Net.BCrypt.HashPassword("Admin@123"));
+Console.WriteLine(BCrypt.Net.BCrypt.HashPassword("Manager@123"));
+Console.WriteLine(BCrypt.Net.BCrypt.HashPassword("Employee@123"));
+```
+
+Then run this in SSMS (replace `<HASH_...>` with the real output above):
+
+```sql
+USE LeaveFlowDB;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM Users WHERE Email = 'admin@leaveflow.com')
+INSERT INTO Users (Email, PasswordHash, FirstName, LastName, Role, TeamId)
+VALUES ('admin@leaveflow.com', '<HASH_FOR_Admin@123>', 'Admin', 'User', 2, NULL);
+
+IF NOT EXISTS (SELECT 1 FROM Users WHERE Email = 'manager@leaveflow.com')
+INSERT INTO Users (Email, PasswordHash, FirstName, LastName, Role, TeamId)
+VALUES ('manager@leaveflow.com', '<HASH_FOR_Manager@123>', 'Jane', 'Manager', 1, 1);
+
+IF NOT EXISTS (SELECT 1 FROM Users WHERE Email = 'employee@leaveflow.com')
+INSERT INTO Users (Email, PasswordHash, FirstName, LastName, Role, TeamId)
+VALUES ('employee@leaveflow.com', '<HASH_FOR_Employee@123>', 'John', 'Employee', 0, 1);
+
+DECLARE @EmpId INT = (SELECT Id FROM Users WHERE Email = 'employee@leaveflow.com');
+DECLARE @MgrId INT = (SELECT Id FROM Users WHERE Email = 'manager@leaveflow.com');
+
+INSERT INTO LeaveBalances (EmployeeId, LeaveType, TotalDays, UsedDays, Year)
+SELECT @EmpId, 0, 20, 0, 2025 WHERE NOT EXISTS (SELECT 1 FROM LeaveBalances WHERE EmployeeId = @EmpId AND LeaveType = 0 AND Year = 2025);
+INSERT INTO LeaveBalances (EmployeeId, LeaveType, TotalDays, UsedDays, Year)
+SELECT @EmpId, 1, 10, 0, 2025 WHERE NOT EXISTS (SELECT 1 FROM LeaveBalances WHERE EmployeeId = @EmpId AND LeaveType = 1 AND Year = 2025);
+INSERT INTO LeaveBalances (EmployeeId, LeaveType, TotalDays, UsedDays, Year)
+SELECT @EmpId, 2, 5,  0, 2025 WHERE NOT EXISTS (SELECT 1 FROM LeaveBalances WHERE EmployeeId = @EmpId AND LeaveType = 2 AND Year = 2025);
+INSERT INTO LeaveBalances (EmployeeId, LeaveType, TotalDays, UsedDays, Year)
+SELECT @MgrId, 0, 20, 0, 2025 WHERE NOT EXISTS (SELECT 1 FROM LeaveBalances WHERE EmployeeId = @MgrId AND LeaveType = 0 AND Year = 2025);
+INSERT INTO LeaveBalances (EmployeeId, LeaveType, TotalDays, UsedDays, Year)
+SELECT @MgrId, 1, 10, 0, 2025 WHERE NOT EXISTS (SELECT 1 FROM LeaveBalances WHERE EmployeeId = @MgrId AND LeaveType = 1 AND Year = 2025);
+GO
+```
+
+---
+
+### 1.6 Run Both Projects
+
+Open two terminals:
+
+```bash
+# Terminal 1 — API
+cd src/LeaveFlow.API
+dotnet run
+# → https://localhost:5001/swagger
+
+# Terminal 2 — Blazor UI
+cd src/LeaveFlow.BlazorUI
+dotnet run
+# → https://localhost:5002
+```
+
+Test login in Swagger:
+```json
+POST /api/auth/login
+{ "email": "admin@leaveflow.com", "password": "Admin@123" }
+```
+Copy `accessToken` → click **Authorize** → paste `Bearer <token>`.
+
+Then open `https://localhost:5002` in your browser and log in with the same credentials.
+
+---
+
+## 2. Project Structure
 
 ```
 src/
 ├── LeaveFlow.Domain/
-│   ├── Entities/          ← User, LeaveRequest, LeaveBalance, AuditLog
+│   ├── Entities/          ← User, LeaveRequest, LeaveBalance, AuditLog, IdempotencyKey
 │   └── Enums/             ← LeaveType, LeaveStatus, UserRole
 │
 ├── LeaveFlow.Application/
 │   ├── Common/            ← Result<T>
-│   ├── DTOs/              ← Request/response shapes
+│   ├── DTOs/              ← All request/response shapes
 │   ├── Interfaces/        ← IRepository contracts, IServices
 │   └── Features/
 │       ├── Auth/          ← LoginCommand + Handler + Validator
 │       └── LeaveRequests/
-│           ├── Commands/  ← Create, Review, Cancel
-│           └── Queries/   ← GetMy, GetPending, GetBalances
+│           ├── Commands/  ← Create, Review, Cancel handlers
+│           └── Queries/   ← GetMy, GetPending, GetBalances handlers
 │
 ├── LeaveFlow.Infrastructure/
 │   ├── Persistence/       ← AppDbContext (EF Core)
-│   ├── Repositories/      ← Concrete DB implementations
-│   └── Services/          ← JWT, Email, PasswordHasher
+│   ├── Repositories/      ← All 5 repository implementations + UnitOfWork
+│   └── Services/          ← JwtService, EmailService, PasswordHasher
 │
 ├── LeaveFlow.API/
 │   ├── Controllers/       ← AuthController, LeaveRequestsController, AdminController
 │   ├── Middleware/        ← ExceptionMiddleware
-│   ├── Program.cs         ← App wiring
-│   └── appsettings.json   ← Config
+│   ├── Program.cs         ← Full wiring: JWT, Swagger, CORS, Serilog
+│   └── appsettings.json   ← All config keys
 │
-└── LeaveFlow.BlazorUI/    ← YOUR MAIN BUILD TARGET (create this project)
-    ├── Pages/
-    ├── Services/
-    ├── Shared/
-    └── wwwroot/
+└── LeaveFlow.BlazorUI/
+    ├── Components/
+    │   ├── Layout/        ← MainLayout, NavMenu, TopBar, EmptyLayout
+    │   └── Pages/
+    │       ├── Login.razor, Dashboard.razor, MyLeaves.razor
+    │       ├── CreateLeave.razor, Approvals.razor, Profile.razor
+    │       └── Admin/     ← AuditLogs.razor, Users.razor
+    ├── Services/          ← ApiService.cs, AuthService.cs
+    ├── wwwroot/app.css    ← Full design system
+    └── Program.cs         ← Blazor wiring: HttpClient, LocalStorage, AuthService
 ```
 
 ---
 
 ## 3. Sprint Map
 
-### Sprint 0 — Environment & Boilerplate ✅ (Done by Thando)
-- [x] Solution structure created
+### Sprint 0 — Boilerplate ✅ Complete
+- [x] Solution with 5 projects created and building
 - [x] Domain entities and enums
 - [x] Application CQRS handlers (Auth, LeaveRequests)
 - [x] Infrastructure (DbContext, Repos, JWT, Email, BCrypt)
-- [x] API Controllers wired up
-- [x] Swagger + JWT auth configured
-- [x] README and ARCHITECTURE docs
+- [x] API Controllers, Swagger, JWT auth, CORS, Serilog
+- [x] Blazor UI — all pages, layout, services, design system
+- [x] All docs: README, ARCHITECTURE, APHELELE_SPRINT, DB_SETUP
 
 ---
 
-### Sprint 1 — Database & API Verification (Week 1)
+### Sprint 1 — Local Environment Verification (Your First Task)
 
-**Goal:** Get the API running locally with real data.
+**Goal:** Get both projects running locally with real data.
 
-| Task | File(s) | Notes |
-|------|---------|-------|
-| Run EF migrations | `LeaveFlow.Infrastructure` | Creates all tables |
-| Seed test users | SSMS / SQL script | Admin, Manager, Employee |
-| Seed leave balances | SSMS / SQL script | Per user per type per year |
-| Test all endpoints in Swagger | `LeaveFlow.API` | Login → copy token → test each route |
-| Fix any migration issues | `AppDbContext.cs` | Add missing configs if needed |
-| Add `dotnet-ef` tool if missing | Terminal | `dotnet tool install --global dotnet-ef` |
+| Task | Where | Done? |
+|------|-------|-------|
+| Install .NET 8 SDK | Prerequisites | ☐ |
+| Install dotnet-ef tool | Terminal | ☐ |
+| Clone repo + checkout `feature/aphelele` | Git | ☐ |
+| Update connection string in `appsettings.json` | `LeaveFlow.API` | ☐ |
+| Run EF migrations | `LeaveFlow.Infrastructure` | ☐ |
+| Seed test users + balances | SSMS | ☐ |
+| Run API — test all 8 endpoints in Swagger | `LeaveFlow.API` | ☐ |
+| Run Blazor UI — login + navigate all pages | `LeaveFlow.BlazorUI` | ☐ |
 
-**Done when:** All 8 API endpoints return correct responses in Swagger.
-
----
-
-### Sprint 2 — Blazor UI Project Setup (Week 1–2)
-
-**Goal:** Create the Blazor Server project and wire it to the API.
-
-| Task | File(s) | Notes |
-|------|---------|-------|
-| Create Blazor Server project | `src/LeaveFlow.BlazorUI` | `dotnet new blazorserver -n LeaveFlow.BlazorUI` |
-| Add to solution | `LeaveFlow.sln` | `dotnet sln add src/LeaveFlow.BlazorUI/LeaveFlow.BlazorUI.csproj` |
-| Add HttpClient + base URL config | `Program.cs` (Blazor) | Point to `https://localhost:5001` |
-| Create `ApiService.cs` | `Services/ApiService.cs` | Typed HttpClient wrapper for all API calls |
-| Create `AuthService.cs` | `Services/AuthService.cs` | Stores JWT in session, exposes current user/role |
-| Add `appsettings.json` | `LeaveFlow.BlazorUI` | `"ApiBaseUrl": "https://localhost:5001"` |
-| Add layout shell | `Shared/MainLayout.razor` | Sidebar + topbar skeleton |
-| Add route guard | `App.razor` | Redirect to `/login` if not authenticated |
-
-**Done when:** Blazor app starts, shows login page, redirects unauthenticated users.
+**Done when:** You can log in at `https://localhost:5002` as all 3 roles and see the correct pages.
 
 ---
 
-### Sprint 3 — Authentication UI (Week 2)
+### Sprint 2 — Bug Fixes & UI Polish
 
-**Goal:** Working login flow end-to-end.
+**Goal:** Fix any issues found during Sprint 1 verification.
 
-| Task | File(s) | Notes |
-|------|---------|-------|
-| Login page | `Pages/Login.razor` | Email + password form |
-| Call `POST /api/auth/login` | `ApiService.cs` | On form submit |
-| Store JWT in `ProtectedSessionStorage` | `AuthService.cs` | Secure browser storage |
-| Parse JWT claims (role, name) | `AuthService.cs` | Use `System.IdentityModel.Tokens.Jwt` |
-| Redirect to `/dashboard` on success | `Login.razor` | `NavigationManager.NavigateTo` |
-| Show error on bad credentials | `Login.razor` | Display `result.Error` |
-| Logout button | `Shared/MainLayout.razor` | Clear storage, redirect to `/login` |
-| Role-based menu visibility | `Shared/NavMenu.razor` | Hide Approvals if Employee, hide Admin if not Admin |
-
-**Done when:** Login works, JWT stored, menu shows correct items per role, logout clears session.
+| Task | Where | Notes |
+|------|-------|-------|
+| Fix any API errors found in Swagger | `LeaveFlow.API` | Check 401/403/500 responses |
+| Fix any Blazor rendering issues | `LeaveFlow.BlazorUI/Components/Pages` | Check browser console |
+| Add loading state to all pages that are missing it | All pages | Use `lf-spinner` CSS class |
+| Test role-based nav — Employee sees no Approvals/Admin | `NavMenu.razor` | Log in as each role |
+| Test cancel leave — only shows on Pending requests | `MyLeaves.razor` | Verify button visibility |
+| Test approve/reject modal — comment saves correctly | `Approvals.razor` | Check API response |
+| Verify balance updates after approval | `Dashboard.razor` | Check `UsedDays` increments |
 
 ---
 
-### Sprint 4 — Employee Features (Week 2–3)
+### Sprint 3 — GET /api/admin/users Endpoint
 
-**Goal:** Employees can manage their own leave.
+**Goal:** Wire up the Users admin page to real API data.
 
-| Task | File(s) | Notes |
-|------|---------|-------|
-| Dashboard page | `Pages/Dashboard.razor` | Welcome card, balance summary, recent requests |
-| My Leaves page | `Pages/MyLeaves.razor` | Table with filter + pagination |
-| Cancel button | `Pages/MyLeaves.razor` | `PUT /api/leaverequests/{id}/cancel` |
-| Create Leave page | `Pages/CreateLeave.razor` | Form: type dropdown, date pickers, comments |
-| Real-time balance display | `Pages/CreateLeave.razor` | Fetch `GET /api/leaverequests/balances`, show remaining days |
-| Form validation | `CreateLeave.razor` | End ≥ Start, type required |
-| Idempotency key on submit | `ApiService.cs` | Generate `Guid.NewGuid()` per form submit |
-| Success/error toast | `Shared/Toast.razor` | Reusable toast component |
+The `Admin/Users.razor` page currently shows placeholder data. Add the real endpoint:
 
-**Done when:** Employee can view, create, and cancel leave requests with live balance feedback.
+| Task | Where | Notes |
+|------|-------|-------|
+| Add `GET /api/admin/users` endpoint | `AdminController.cs` | Returns all users |
+| Add `GetAllUsersQuery` + handler | `Application/Features` | Query pattern, no command |
+| Add `GetAllUsersAsync()` to `IUserRepository` | `IRepositories.cs` | Simple `ToListAsync()` |
+| Implement in `UserRepository.cs` | `Infrastructure/Repositories` | |
+| Update `ApiService.cs` | `BlazorUI/Services` | Add `GetUsersAsync()` method |
+| Update `Admin/Users.razor` | `BlazorUI/Components/Pages/Admin` | Replace placeholder with real data |
 
 ---
 
-### Sprint 5 — Manager Features (Week 3)
+### Sprint 4 — Testing
 
-**Goal:** Managers can review team requests.
+**Goal:** Unit and integration test coverage for critical paths.
 
-| Task | File(s) | Notes |
-|------|---------|-------|
-| Approvals page | `Pages/Approvals.razor` | List of pending team requests |
-| Approve button | `Pages/Approvals.razor` | `PUT /api/leaverequests/{id}/review` with `approve: true` |
-| Reject button + comment | `Pages/Approvals.razor` | Modal with optional comment field |
-| Route guard | `Pages/Approvals.razor` | `[Authorize(Roles = "Manager,Admin")]` |
-| Refresh list after action | `Pages/Approvals.razor` | Re-fetch after approve/reject |
-
-**Done when:** Manager can approve and reject requests, list refreshes, emails sent.
-
----
-
-### Sprint 6 — Admin Panel (Week 3–4)
-
-**Goal:** Admins can view audit logs and manage users.
-
-| Task | File(s) | Notes |
-|------|---------|-------|
-| Admin panel page | `Pages/Admin/AdminPanel.razor` | Tabbed: Users / Audit Logs |
-| Audit logs table | `Pages/Admin/AuditLogs.razor` | Paginated, `GET /api/admin/auditlogs` |
-| User list | `Pages/Admin/Users.razor` | List all users (add endpoint if missing) |
-| Add user form | `Pages/Admin/Users.razor` | Create user with role assignment |
-| Route guard | All admin pages | Redirect non-admins |
-
-**Done when:** Admin can view paginated audit logs and manage users.
+| Task | Where | Notes |
+|------|-------|-------|
+| Create `tests/LeaveFlow.UnitTests` project | `tests/` | `dotnet new xunit` |
+| Test `CreateLeaveRequestHandler` — happy path | Unit test | Mock repos, verify save called |
+| Test `CreateLeaveRequestHandler` — insufficient balance | Unit test | Verify `Result.Failure` returned |
+| Test `ReviewLeaveRequestHandler` — approve deducts balance | Unit test | Verify `UsedDays` incremented |
+| Test `LoginHandler` — invalid password | Unit test | Verify `Result.Failure` returned |
+| Create `tests/LeaveFlow.IntegrationTests` project | `tests/` | `dotnet new xunit` + WebApplicationFactory |
+| Integration test `POST /api/auth/login` | Integration test | Real DB, real JWT |
+| Integration test `POST /api/leaverequests` | Integration test | Full flow |
 
 ---
 
-### Sprint 7 — Polish & Testing (Week 4)
+### Sprint 5 — Polish & Production Readiness
 
-**Goal:** Production-ready quality.
+**Goal:** Production-ready quality before PR to main.
 
 | Task | Notes |
 |------|-------|
-| Loading spinners on all async calls | Show spinner while awaiting API |
-| Error boundary component | Catch Blazor render errors gracefully |
-| Responsive layout | Test on mobile viewport |
-| Unit tests for Application handlers | `tests/LeaveFlow.UnitTests` |
-| Integration tests for API endpoints | `tests/LeaveFlow.IntegrationTests` |
-| Blazor UI tests with bUnit | `tests/LeaveFlow.BlazorUI.Tests` |
-| `.gitignore` cleanup | Ensure no secrets committed |
-| Final README update | Document Blazor setup steps |
+| Add error boundary to `Routes.razor` | Catch Blazor render errors gracefully |
+| Add toast notification component | Reusable `Toast.razor` with auto-dismiss |
+| Test responsive layout on mobile viewport | Check sidebar collapses correctly |
+| Review all `appsettings.json` — no real secrets committed | Use environment variables or secrets manager |
+| Update `APHELELE_SPRINT.md` — mark completed sprints | Keep the doc current |
+| Open Pull Request: `feature/aphelele` → `main` | GitHub PR with description |
 
 ---
 
 ## 4. API ↔ Blazor UI Wiring Map
 
-Every Blazor page maps to one or more API calls. Use this as your implementation checklist.
-
-| Blazor Page | HTTP Method | API Endpoint | Handler Called |
-|-------------|-------------|--------------|----------------|
+| Blazor Page | Method | API Endpoint | Handler |
+|-------------|--------|--------------|---------|
 | `Login.razor` | POST | `/api/auth/login` | `LoginHandler` |
 | `Dashboard.razor` | GET | `/api/leaverequests/balances` | `GetLeaveBalancesHandler` |
 | `Dashboard.razor` | GET | `/api/leaverequests/my` | `GetMyLeaveRequestsHandler` |
@@ -361,113 +328,12 @@ Every Blazor page maps to one or more API calls. Use this as your implementation
 | `CreateLeave.razor` | POST | `/api/leaverequests` | `CreateLeaveRequestHandler` |
 | `Approvals.razor` | GET | `/api/leaverequests/pending` | `GetPendingTeamRequestsHandler` |
 | `Approvals.razor` | PUT | `/api/leaverequests/{id}/review` | `ReviewLeaveRequestHandler` |
-| `Admin/AuditLogs.razor` | GET | `/api/admin/auditlogs?page=1&pageSize=20` | `AuditLogRepository.GetAllAsync` |
+| `Admin/AuditLogs.razor` | GET | `/api/admin/auditlogs?page=1&pageSize=20` | `AuditLogRepository` |
+| `Admin/Users.razor` | GET | `/api/admin/users` *(Sprint 3)* | `GetAllUsersHandler` |
 
 ---
 
-## 5. ApiService.cs — Suggested Structure
-
-Create `src/LeaveFlow.BlazorUI/Services/ApiService.cs`:
-
-```csharp
-public class ApiService(HttpClient http, AuthService auth)
-{
-    // Auth
-    Task<LoginResponse?> LoginAsync(LoginRequest req);
-
-    // Leave Requests
-    Task<List<LeaveRequestDto>> GetMyRequestsAsync();
-    Task<List<LeaveBalanceDto>> GetBalancesAsync(int year);
-    Task<int> CreateLeaveRequestAsync(CreateLeaveRequestDto dto, string idempotencyKey);
-    Task CancelLeaveRequestAsync(int id);
-
-    // Manager
-    Task<List<LeaveRequestDto>> GetPendingRequestsAsync();
-    Task ReviewLeaveRequestAsync(int id, ReviewLeaveRequestDto dto);
-
-    // Admin
-    Task<List<AuditLog>> GetAuditLogsAsync(int page, int pageSize);
-}
-```
-
-Each method:
-1. Adds `Authorization: Bearer <token>` header from `AuthService`
-2. Calls the API
-3. Returns the deserialized response or throws on non-2xx
-
----
-
-## 6. AuthService.cs — Suggested Structure
-
-```csharp
-public class AuthService(ProtectedSessionStorage storage, NavigationManager nav)
-{
-    Task LoginAsync(LoginResponse response);   // stores token + role
-    Task LogoutAsync();                        // clears storage, redirects
-    Task<string?> GetTokenAsync();             // returns stored JWT
-    Task<string?> GetRoleAsync();              // "Employee" / "Manager" / "Admin"
-    Task<bool> IsAuthenticatedAsync();         // checks token exists + not expired
-    Task<string?> GetUserNameAsync();          // from stored FullName
-}
-```
-
----
-
-## 7. Database Clone / Restore Guide
-
-### Option A — Let EF Create It (Recommended for Dev)
-
-```bash
-dotnet ef database update --startup-project ../LeaveFlow.API
-```
-
-This creates a fresh empty `LeaveFlowDB`. Then run the seed SQL from Section 1.6.
-
-### Option B — Restore from a Backup (.bak file)
-
-If Thando shares a `.bak` file:
-
-1. Open SSMS
-2. Right-click **Databases** → **Restore Database**
-3. Select **Device** → browse to the `.bak` file
-4. Set database name to `LeaveFlowDB`
-5. Click OK
-
-Then update your connection string to match.
-
-### Option C — Script the Schema + Data
-
-Thando can generate a script from SSMS:
-- Right-click `LeaveFlowDB` → **Tasks** → **Generate Scripts**
-- Include schema + data
-- Share the `.sql` file
-
-You run it in SSMS:
-```sql
--- Open the .sql file in SSMS and execute against your local server
-```
-
----
-
-## 8. Adding a New Migration (When Entities Change)
-
-Whenever you change a Domain entity (add a property, new table, etc.):
-
-```bash
-cd src/LeaveFlow.Infrastructure
-
-# Create the migration
-dotnet ef migrations add <DescriptiveName> --startup-project ../LeaveFlow.API
-
-# Apply it
-dotnet ef database update --startup-project ../LeaveFlow.API
-```
-
-Example names: `AddRefreshTokenToUser`, `AddLeaveTypePersonal`, `AddTeamTable`
-
----
-
-## 9. Git Workflow
+## 5. Git Workflow
 
 ```bash
 # Always work on your branch
@@ -479,13 +345,12 @@ git merge origin/main
 
 # Stage and commit your work
 git add .
-git commit -m "feat(blazor): add login page and AuthService"
+git commit -m "feat(blazor): fix balance display on dashboard"
 
 # Push your branch
 git push origin feature/aphelele
 
-# When a feature is complete, open a Pull Request on GitHub:
-# feature/aphelele → main
+# When ready → open Pull Request on GitHub: feature/aphelele → main
 ```
 
 ### Commit Message Format
@@ -497,31 +362,22 @@ Types: feat | fix | refactor | test | docs | chore
 Scope: api | blazor | domain | infra | auth | leaves | admin
 ```
 
-Examples:
-```
-feat(blazor): add create leave form with balance validation
-feat(api): add GET /api/users endpoint for admin panel
-fix(infra): fix overlap check query including canceled requests
-test(app): add unit tests for CreateLeaveRequestHandler
-docs: update APHELELE_SPRINT with completed sprint 1 tasks
-```
-
 ---
 
-## 10. Definition of Done (Per Task)
+## 6. Definition of Done
 
 A task is only **done** when:
 
-- [ ] Code compiles with 0 errors
-- [ ] Feature works end-to-end (API → DB or UI → API → DB)
+- [ ] Code compiles with 0 errors, 0 warnings
+- [ ] Feature works end-to-end (UI → API → DB or API → DB)
 - [ ] No hardcoded secrets or connection strings
 - [ ] Committed to `feature/aphelele` with a meaningful message
 - [ ] Tested manually (Swagger for API, browser for UI)
-- [ ] Unit test written if it's a handler or service (Sprint 7)
+- [ ] Unit test written if it's a handler or service (Sprint 4)
 
 ---
 
-## 11. Contacts & Resources
+## 7. Resources
 
 | Resource | Link |
 |----------|------|
@@ -531,5 +387,6 @@ A task is only **done** when:
 | MediatR Docs | https://github.com/jbogard/MediatR |
 | FluentValidation Docs | https://docs.fluentvalidation.net |
 | Blazor Docs | https://learn.microsoft.com/en-us/aspnet/core/blazor |
+| Blazored.LocalStorage | https://github.com/Blazored/LocalStorage |
 | BCrypt NuGet | https://www.nuget.org/packages/BCrypt.Net-Next |
 | JWT Debugger | https://jwt.io |

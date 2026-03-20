@@ -9,11 +9,11 @@
 Think of the system like a restaurant:
 
 ```
-Customer (Blazor UI)
-    → Waiter (API Controllers)
-        → Kitchen Manager (Application / CQRS)
-            → Recipe Rules (Domain)
-                → Fridge & Suppliers (Infrastructure / Database)
+Customer sitting at a table  →  Blazor UI        (https://localhost:5002)
+Waiter taking the order      →  API Controllers  (https://localhost:5001)
+Kitchen Manager              →  Application / CQRS Handlers
+Recipe Rulebook              →  Domain Entities & Enums
+Fridge & Suppliers           →  Infrastructure (DB, Email, JWT, BCrypt)
 ```
 
 Each layer only talks to the layer directly below it.
@@ -33,12 +33,12 @@ The rulebook. "A leave request must have a start date before the end date." "A u
 
 | File | What it does |
 |------|-------------|
-| `Entities/User.cs` | Represents an employee/manager/admin — their name, email, role, team |
+| `Entities/User.cs` | Represents an employee/manager/admin — name, email, role, team |
 | `Entities/LeaveRequest.cs` | A single leave request — dates, type, status, who reviewed it |
 | `Entities/LeaveBalance.cs` | How many leave days an employee has left per type per year |
 | `Entities/AuditLog.cs` | A record of every important action (who did what, when) |
 | `Entities/IdempotencyKey.cs` | Prevents the same request being processed twice |
-| `Enums/Enums.cs` | Fixed value lists: `LeaveType` (Vacation/Sick/etc), `LeaveStatus` (Pending/Approved/etc), `UserRole` (Employee/Manager/Admin) |
+| `Enums/Enums.cs` | `LeaveType` (Vacation/Sick/Personal/Maternity/Paternity/Unpaid), `LeaveStatus` (Pending/Approved/Rejected/Canceled), `UserRole` (Employee/Manager/Admin) |
 
 ### Rules:
 - ✅ Can reference other Domain files
@@ -72,7 +72,7 @@ API → mediator.Send(new CreateLeaveRequestCommand(...))
               CreateLeaveRequestHandler.Handle(...)
 ```
 
-#### Result<T>
+#### Result\<T\>
 Every handler returns `Result<T>` — either `Result.Success(value)` or `Result.Failure("error message")`. No exceptions thrown for business errors.
 
 ### What's inside:
@@ -80,7 +80,7 @@ Every handler returns `Result<T>` — either `Result.Success(value)` or `Result.
 | Folder/File | What it does |
 |-------------|-------------|
 | `Common/Result.cs` | The success/failure wrapper returned by every handler |
-| `Interfaces/IRepositories.cs` | Contracts (interfaces) for all database operations — Application defines WHAT it needs, Infrastructure provides HOW |
+| `Interfaces/IRepositories.cs` | Contracts for all database operations — Application defines WHAT it needs, Infrastructure provides HOW |
 | `Interfaces/IServices.cs` | Contracts for JWT, Email, and Password hashing |
 | `DTOs/Dtos.cs` | Data shapes passed between API and Application (LoginRequest, LeaveRequestDto, etc.) |
 | `Features/Auth/LoginHandler.cs` | Handles login: checks credentials, returns JWT token |
@@ -111,12 +111,12 @@ The fridge, the suppliers, and the delivery drivers. The kitchen manager (Applic
 
 | Folder/File | What it does |
 |-------------|-------------|
-| `Persistence/AppDbContext.cs` | EF Core database context — maps entities to SQL tables, defines indexes |
+| `Persistence/AppDbContext.cs` | EF Core database context — maps entities to SQL tables, defines unique indexes |
 | `Repositories/UserRepository.cs` | DB operations for Users (find by email, find by id, get team) |
 | `Repositories/LeaveRequestRepository.cs` | DB operations for leave requests (overlap check, pending by team, etc.) |
 | `Repositories/LeaveBalanceRepository.cs` | DB operations for leave balances |
 | `Repositories/MiscRepositories.cs` | AuditLog and IdempotencyKey DB operations |
-| `Repositories/UnitOfWork.cs` | Wraps `SaveChangesAsync` — all changes in one command save together or not at all |
+| `Repositories/UnitOfWork.cs` | Wraps `SaveChangesAsync` — all changes save together or not at all |
 | `Services/JwtService.cs` | Generates JWT access tokens and refresh tokens |
 | `Services/EmailService.cs` | Sends emails via SMTP using MailKit |
 | `Services/PasswordHasher.cs` | Hashes and verifies passwords using BCrypt |
@@ -131,10 +131,10 @@ The fridge, the suppliers, and the delivery drivers. The kitchen manager (Applic
 ## Layer 4 — API (`LeaveFlow.API`)
 
 ### What is it?
-The **entry point** of the backend. It receives HTTP requests, validates auth, calls MediatR, and returns HTTP responses. It knows nothing about business rules.
+The **HTTP entry point** of the backend. It receives HTTP requests, validates auth, calls MediatR, and returns HTTP responses. It knows nothing about business rules.
 
 ### Think of it as:
-The waiter. Takes the order from the customer, passes it to the kitchen, brings back the result. Doesn't cook anything.
+The waiter. Takes the order from the customer (Blazor UI), passes it to the kitchen (Application), brings back the result. Doesn't cook anything.
 
 ### What's inside:
 
@@ -144,7 +144,7 @@ The waiter. Takes the order from the customer, passes it to the kitchen, brings 
 | `Controllers/LeaveRequestsController.cs` | All leave request endpoints (create, cancel, review, balances) |
 | `Controllers/AdminController.cs` | `GET /api/admin/auditlogs` — Admin only |
 | `Middleware/ExceptionMiddleware.cs` | Catches any unhandled exception and returns a clean JSON error |
-| `Program.cs` | Wires everything together: JWT auth, Swagger, CORS, Serilog, DI |
+| `Program.cs` | Wires everything: JWT auth, Swagger + Bearer UI, CORS, Serilog, DI |
 | `appsettings.json` | Config: DB connection string, JWT secret, email settings, CORS origin |
 
 ### Rules:
@@ -154,36 +154,74 @@ The waiter. Takes the order from the customer, passes it to the kitchen, brings 
 
 ---
 
+## Layer 5 — Blazor UI (`LeaveFlow.BlazorUI`)
+
+### What is it?
+The **web frontend**. A Blazor Server application that calls the API over HTTP, stores the JWT in browser local storage, and renders role-aware pages. It runs on `https://localhost:5002`.
+
+### Think of it as:
+The customer sitting at the table. They see a menu (the UI), place an order (click a button), and the waiter (API) handles the rest. The customer never goes into the kitchen.
+
+### What's inside:
+
+| Folder/File | What it does |
+|-------------|-------------|
+| `Components/Layout/MainLayout.razor` | Shell layout — checks auth on every render, shows sidebar + topbar, redirects to `/login` if JWT is missing or expired |
+| `Components/Layout/NavMenu.razor` | Sidebar navigation — filters menu items by role (Employee/Manager/Admin), highlights active page, logout button |
+| `Components/Layout/TopBar.razor` | Top bar — shows current page title, user avatar with initials, role badge |
+| `Components/Layout/EmptyLayout.razor` | Bare layout used only by the Login page (no sidebar/topbar) |
+| `Components/Pages/Login.razor` | Email + password form, calls API, stores JWT, redirects to dashboard |
+| `Components/Pages/Dashboard.razor` | Stat cards (vacation days, sick days, pending, approved), balance progress bars, recent requests table |
+| `Components/Pages/MyLeaves.razor` | Filterable table of all leave requests, cancel button for pending ones |
+| `Components/Pages/CreateLeave.razor` | Leave request form with real-time balance sidebar, day count, overlap/balance validation |
+| `Components/Pages/Approvals.razor` | Manager view — pending team requests table, approve/reject modal with comment |
+| `Components/Pages/Admin/AuditLogs.razor` | Paginated audit log table with page size selector |
+| `Components/Pages/Admin/Users.razor` | User stats cards, user table, add user modal |
+| `Components/Pages/Profile.razor` | Edit name/email, change password with mismatch validation |
+| `Services/AuthService.cs` | Stores/retrieves JWT via Blazored.LocalStorage, checks token expiry, extracts role and name |
+| `Services/ApiService.cs` | Typed HttpClient wrapper — auto-injects Bearer header, handles all 8 API endpoints, adds Idempotency-Key on POST |
+| `wwwroot/app.css` | Full design system — CSS custom properties, sidebar, stat cards, tables, forms, badges, modals, toasts, spinner |
+
+### Rules:
+- ✅ Can reference Application (for DTOs and enums only)
+- ✅ Communicates with API via HTTP — never calls repositories or handlers directly
+- ❌ No business logic — all rules enforced in Application/Domain
+
+---
+
 ## How a Request Flows End-to-End
 
 ### Example: Employee submits a leave request
 
 ```
-1. Blazor UI
-   POST /api/leaverequests
+1. Blazor UI — CreateLeave.razor
+   User fills form, clicks "Submit Leave Request"
+   ApiService generates Guid idempotency key
+   POST https://localhost:5001/api/leaverequests
    Headers: Authorization: Bearer <jwt>, Idempotency-Key: <uuid>
    Body: { startDate, endDate, leaveType, comments }
 
-2. LeaveRequestsController
-   - Extracts UserId from JWT claims
-   - Checks idempotency key (already processed? return cached)
-   - Calls: mediator.Send(new CreateLeaveRequestCommand(userId, dto))
+2. LeaveRequestsController (API)
+   Extracts UserId from JWT claims
+   Checks idempotency key — already processed? return cached response
+   Calls: mediator.Send(new CreateLeaveRequestCommand(userId, dto))
 
 3. CreateLeaveRequestHandler (Application)
-   - Validates dates
-   - Checks for overlapping requests via ILeaveRequestRepository
-   - Checks balance via ILeaveBalanceRepository
-   - Creates LeaveRequest entity
-   - Adds AuditLog entry
-   - Calls IUnitOfWork.SaveChangesAsync() → one DB transaction
-   - Calls IEmailService.SendAsync() → sends confirmation email
-   - Returns Result<int>.Success(newRequestId)
+   Validates dates (end >= start)
+   Checks for overlapping requests via ILeaveRequestRepository
+   Checks balance via ILeaveBalanceRepository
+   Creates LeaveRequest entity
+   Adds AuditLog entry
+   Calls IUnitOfWork.SaveChangesAsync() → one DB transaction
+   Calls IEmailService.SendAsync() → sends confirmation email
+   Returns Result<int>.Success(newRequestId)
 
 4. Controller
-   - Result.IsSuccess → return 201 Created with the new ID
+   Result.IsSuccess → return 201 Created with the new ID
 
 5. Blazor UI
-   - Shows success toast, refreshes leave list
+   Shows success alert, refreshes balance sidebar
+   User navigates to /my-leaves to see the new request
 ```
 
 ---
@@ -191,10 +229,11 @@ The waiter. Takes the order from the customer, passes it to the kitchen, brings 
 ## Dependency Rules (who can talk to who)
 
 ```
-LeaveFlow.Domain        ← no dependencies
-LeaveFlow.Application   ← Domain only
-LeaveFlow.Infrastructure← Domain + Application
-LeaveFlow.API           ← Application + Infrastructure
+LeaveFlow.Domain         ← no dependencies
+LeaveFlow.Application    ← Domain only
+LeaveFlow.Infrastructure ← Domain + Application
+LeaveFlow.API            ← Application + Infrastructure
+LeaveFlow.BlazorUI       ← Application (DTOs only) + API (via HTTP)
 ```
 
 **Never go backwards. Never skip layers.**
@@ -212,11 +251,14 @@ All your database changes (add request + add audit log) are saved in **one singl
 ### CQRS
 Commands change data. Queries read data. They never share a handler. This keeps code small, focused, and easy to test individually.
 
-### Result<T>
+### Result\<T\>
 No `throw new Exception("balance too low")`. Instead: `return Result<int>.Failure("Insufficient leave balance.")`. The controller checks `result.IsSuccess` and returns the right HTTP status. Clean, predictable, testable.
 
 ### Idempotency
 If the network drops after the server processes a request but before the client gets the response, the client might retry. The `Idempotency-Key` header ensures the server returns the same cached response instead of creating a duplicate record.
+
+### Auth Guard (Blazor)
+`MainLayout.razor` runs `Auth.IsAuthenticatedAsync()` on every `OnAfterRenderAsync`. If the JWT is missing or expired, it immediately redirects to `/login`. No page ever renders for unauthenticated users.
 
 ---
 
@@ -230,4 +272,6 @@ If the network drops after the server processes a request but before the client 
 | New DB table | `Domain` entity → `Infrastructure/AppDbContext` → EF migration |
 | New email template | `Infrastructure/Services/EmailService` |
 | New validation rule | `Application/Features/.../Validator` |
-| New UI page | `LeaveFlow.BlazorUI/Pages` (future) |
+| New UI page | `LeaveFlow.BlazorUI/Components/Pages` + route in `@page` directive |
+| New nav menu item | `LeaveFlow.BlazorUI/Components/Layout/NavMenu.razor` |
+| New API service method | `LeaveFlow.BlazorUI/Services/ApiService.cs` |

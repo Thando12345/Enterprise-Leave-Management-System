@@ -1,6 +1,6 @@
 # Database Setup Guide — LeaveFlow Enterprise
 
-> Complete guide to create, seed, clone, and migrate the LeaveFlowDB database.
+> Complete guide to create, seed, clone, and migrate the `LeaveFlowDB` database.
 
 ---
 
@@ -10,11 +10,7 @@
 
 ```bash
 dotnet tool install --global dotnet-ef
-```
-
-Verify:
-```bash
-dotnet ef --version
+dotnet ef --version   # verify
 ```
 
 ### Step 2: Set your connection string
@@ -43,12 +39,15 @@ dotnet ef database update --startup-project ../LeaveFlow.API
 ### Step 4: Verify tables in SSMS
 
 Connect to your server → `LeaveFlowDB` → Tables:
-- `dbo.Users`
-- `dbo.LeaveRequests`
-- `dbo.LeaveBalances`
-- `dbo.AuditLogs`
-- `dbo.IdempotencyKeys`
-- `dbo.__EFMigrationsHistory`
+
+| Table | Purpose |
+|-------|---------|
+| `dbo.Users` | All system users (Employee/Manager/Admin) |
+| `dbo.LeaveRequests` | All leave requests |
+| `dbo.LeaveBalances` | Leave day allocations per user per type per year |
+| `dbo.AuditLogs` | System activity trail |
+| `dbo.IdempotencyKeys` | Duplicate request prevention |
+| `dbo.__EFMigrationsHistory` | EF Core migration tracking |
 
 ---
 
@@ -64,7 +63,7 @@ Connect to your server → `LeaveFlowDB` → Tables:
 
 ## Option 3 — Run SQL Script
 
-If you have a `.sql` schema+data script:
+If you have a `.sql` schema + data script:
 
 ```bash
 sqlcmd -S (localdb)\mssqllocaldb -i LeaveFlowDB_script.sql
@@ -76,16 +75,15 @@ Or open in SSMS and press **F5** to execute.
 
 ## Seed Data Script
 
-Run this in SSMS after the database is created.
+Run this in SSMS **after** the database is created.
 
-> Generate real BCrypt hashes first:
+> **Generate real BCrypt hashes first** (run in any .NET console app or LINQPad):
 > ```csharp
-> // Run in a .NET console app or LINQPad
 > Console.WriteLine(BCrypt.Net.BCrypt.HashPassword("Admin@123"));
 > Console.WriteLine(BCrypt.Net.BCrypt.HashPassword("Manager@123"));
 > Console.WriteLine(BCrypt.Net.BCrypt.HashPassword("Employee@123"));
 > ```
-> Replace the hash placeholders below with the real output.
+> Replace `<HASH_FOR_...>` below with the real output.
 
 ```sql
 USE LeaveFlowDB;
@@ -93,7 +91,7 @@ GO
 
 -- =============================================
 -- USERS
--- Role: 0=Employee, 1=Manager, 2=Admin
+-- Role enum: 0=Employee, 1=Manager, 2=Admin
 -- =============================================
 IF NOT EXISTS (SELECT 1 FROM Users WHERE Email = 'admin@leaveflow.com')
 INSERT INTO Users (Email, PasswordHash, FirstName, LastName, Role, TeamId)
@@ -108,33 +106,34 @@ INSERT INTO Users (Email, PasswordHash, FirstName, LastName, Role, TeamId)
 VALUES ('employee@leaveflow.com', '<HASH_FOR_Employee@123>', 'John', 'Employee', 0, 1);
 
 -- =============================================
--- LEAVE BALANCES (for employee, adjust Id if needed)
--- LeaveType: 0=Vacation, 1=Sick, 2=Personal, 3=Maternity, 4=Paternity, 5=Unpaid
+-- LEAVE BALANCES
+-- LeaveType enum: 0=Vacation, 1=Sick, 2=Personal,
+--                 3=Maternity, 4=Paternity, 5=Unpaid
 -- =============================================
 DECLARE @EmpId INT = (SELECT Id FROM Users WHERE Email = 'employee@leaveflow.com');
-
-IF NOT EXISTS (SELECT 1 FROM LeaveBalances WHERE EmployeeId = @EmpId AND LeaveType = 0 AND Year = 2025)
-INSERT INTO LeaveBalances (EmployeeId, LeaveType, TotalDays, UsedDays, Year)
-VALUES (@EmpId, 0, 20, 0, 2025);
-
-IF NOT EXISTS (SELECT 1 FROM LeaveBalances WHERE EmployeeId = @EmpId AND LeaveType = 1 AND Year = 2025)
-INSERT INTO LeaveBalances (EmployeeId, LeaveType, TotalDays, UsedDays, Year)
-VALUES (@EmpId, 1, 10, 0, 2025);
-
-IF NOT EXISTS (SELECT 1 FROM LeaveBalances WHERE EmployeeId = @EmpId AND LeaveType = 2 AND Year = 2025)
-INSERT INTO LeaveBalances (EmployeeId, LeaveType, TotalDays, UsedDays, Year)
-VALUES (@EmpId, 2, 5, 0, 2025);
-
--- Manager balances
 DECLARE @MgrId INT = (SELECT Id FROM Users WHERE Email = 'manager@leaveflow.com');
 
-IF NOT EXISTS (SELECT 1 FROM LeaveBalances WHERE EmployeeId = @MgrId AND LeaveType = 0 AND Year = 2025)
+-- Employee balances
 INSERT INTO LeaveBalances (EmployeeId, LeaveType, TotalDays, UsedDays, Year)
-VALUES (@MgrId, 0, 20, 0, 2025);
+SELECT @EmpId, 0, 20, 0, 2025
+WHERE NOT EXISTS (SELECT 1 FROM LeaveBalances WHERE EmployeeId = @EmpId AND LeaveType = 0 AND Year = 2025);
 
-IF NOT EXISTS (SELECT 1 FROM LeaveBalances WHERE EmployeeId = @MgrId AND LeaveType = 1 AND Year = 2025)
 INSERT INTO LeaveBalances (EmployeeId, LeaveType, TotalDays, UsedDays, Year)
-VALUES (@MgrId, 1, 10, 0, 2025);
+SELECT @EmpId, 1, 10, 0, 2025
+WHERE NOT EXISTS (SELECT 1 FROM LeaveBalances WHERE EmployeeId = @EmpId AND LeaveType = 1 AND Year = 2025);
+
+INSERT INTO LeaveBalances (EmployeeId, LeaveType, TotalDays, UsedDays, Year)
+SELECT @EmpId, 2, 5, 0, 2025
+WHERE NOT EXISTS (SELECT 1 FROM LeaveBalances WHERE EmployeeId = @EmpId AND LeaveType = 2 AND Year = 2025);
+
+-- Manager balances
+INSERT INTO LeaveBalances (EmployeeId, LeaveType, TotalDays, UsedDays, Year)
+SELECT @MgrId, 0, 20, 0, 2025
+WHERE NOT EXISTS (SELECT 1 FROM LeaveBalances WHERE EmployeeId = @MgrId AND LeaveType = 0 AND Year = 2025);
+
+INSERT INTO LeaveBalances (EmployeeId, LeaveType, TotalDays, UsedDays, Year)
+SELECT @MgrId, 1, 10, 0, 2025
+WHERE NOT EXISTS (SELECT 1 FROM LeaveBalances WHERE EmployeeId = @MgrId AND LeaveType = 1 AND Year = 2025);
 
 PRINT 'Seed data inserted successfully.';
 GO
@@ -144,20 +143,46 @@ GO
 
 ## Adding Future Migrations
 
-When you change a Domain entity:
+Whenever you change a Domain entity (add a property, new table, etc.):
 
 ```bash
 cd src/LeaveFlow.Infrastructure
 
-# Create migration
-dotnet ef migrations add <Name> --startup-project ../LeaveFlow.API
+# Create the migration
+dotnet ef migrations add <DescriptiveName> --startup-project ../LeaveFlow.API
 
-# Apply
+# Apply it
 dotnet ef database update --startup-project ../LeaveFlow.API
 
-# Rollback last migration (if needed)
+# Rollback last migration if needed
 dotnet ef migrations remove --startup-project ../LeaveFlow.API
 ```
+
+Example migration names: `AddRefreshTokenToUser`, `AddTeamTable`, `AddLeaveTypePersonal`
+
+---
+
+## Running the Full System After DB Setup
+
+```bash
+# Terminal 1 — API (must be running first)
+cd src/LeaveFlow.API
+dotnet run
+# → https://localhost:5001/swagger
+
+# Terminal 2 — Blazor UI
+cd src/LeaveFlow.BlazorUI
+dotnet run
+# → https://localhost:5002
+```
+
+Login credentials after seeding:
+
+| Role | Email | Password |
+|------|-------|----------|
+| Admin | admin@leaveflow.com | Admin@123 |
+| Manager | manager@leaveflow.com | Manager@123 |
+| Employee | employee@leaveflow.com | Employee@123 |
 
 ---
 
@@ -168,6 +193,9 @@ dotnet ef migrations remove --startup-project ../LeaveFlow.API
 | `No project was found` | Make sure you're in `src/LeaveFlow.Infrastructure` |
 | `Unable to create migrations` | Check `AppDbContext` constructor uses `DbContextOptions<AppDbContext>` |
 | `Login failed for user` | Check connection string, ensure SQL Server is running |
-| `Table already exists` | Database already has migrations — run `dotnet ef database update` only |
+| `Table already exists` | Database already migrated — run `dotnet ef database update` only |
 | `dotnet ef not found` | Run `dotnet tool install --global dotnet-ef` |
 | LocalDB not starting | Run `sqllocaldb start mssqllocaldb` in terminal |
+| Blazor UI shows blank page | Ensure API is running on port 5001 first |
+| 401 Unauthorized in Swagger | Click Authorize → paste `Bearer <token>` (include the word Bearer) |
+| CORS error in browser | Check `Cors:AllowedOrigin` in `appsettings.json` matches `https://localhost:5002` |
