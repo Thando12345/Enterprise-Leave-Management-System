@@ -1,0 +1,94 @@
+@page "/profile"
+@inject AuthService Auth
+@using LeaveFlow.BlazorUI.Services
+
+<div class="lf-page-header">
+    <div class="lf-page-title">My Profile</div>
+    <div class="lf-page-sub">View and update your account information</div>
+</div>
+
+<div class="lf-grid-2" style="align-items:start">
+    <!-- Profile card -->
+    <div class="lf-card">
+        <div style="display:flex;align-items:center;gap:20px;margin-bottom:28px">
+            <div style="width:72px;height:72px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;flex-shrink:0">
+                @_initials
+            </div>
+            <div>
+                <div style="font-size:18px;font-weight:700;color:var(--gray-800)">@_fullName</div>
+                <div style="margin-top:4px"><span class="badge @_roleBadge">@_role</span></div>
+            </div>
+        </div>
+
+        <div class="lf-form-group">
+            <label class="lf-label">Full Name</label>
+            <input class="lf-input" @bind="_fullName" />
+        </div>
+        <div class="lf-form-group">
+            <label class="lf-label">Email Address</label>
+            <input class="lf-input" type="email" @bind="_email" />
+        </div>
+        <div class="lf-form-group">
+            <label class="lf-label">Role</label>
+            <input class="lf-input" value="@_role" disabled style="background:var(--gray-50);color:var(--gray-400)" />
+        </div>
+
+        @if (_saved)
+        {
+            <div class="lf-alert lf-alert-success">Profile updated successfully.</div>
+        }
+        <button class="btn btn-primary" @onclick="SaveProfile">Save Changes</button>
+    </div>
+
+    <!-- Change password -->
+    <div class="lf-card">
+        <div class="lf-card-title" style="margin-bottom:20px">Change Password</div>
+
+        <div class="lf-form-group">
+            <label class="lf-label">Current Password</label>
+            <input class="lf-input" type="password" @bind="_currentPw" placeholder="••••••••" />
+        </div>
+        <div class="lf-form-group">
+            <label class="lf-label">New Password</label>
+            <input class="lf-input" type="password" @bind="_newPw" placeholder="••••••••" />
+        </div>
+        <div class="lf-form-group">
+            <label class="lf-label">Confirm New Password</label>
+            <input class="lf-input @(_pwMismatch ? "lf-input-error" : "")" type="password"
+                   @bind="_confirmPw" placeholder="••••••••" />
+            @if (_pwMismatch)
+            {
+                <div class="lf-error-msg">Passwords do not match.</div>
+            }
+        </div>
+
+        @if (_pwSaved)
+        {
+            <div class="lf-alert lf-alert-success">Password changed successfully.</div>
+        }
+        <button class="btn btn-outline" @onclick="ChangePassword"
+                disabled="@(string.IsNullOrEmpty(_newPw) || _pwMismatch)">
+            Update Password
+        </button>
+    </div>
+</div>
+
+@code {
+    string _fullName = "", _email = "", _role = "", _initials = "", _roleBadge = "";
+    string _currentPw = "", _newPw = "", _confirmPw = "";
+    bool _saved, _pwSaved;
+    bool _pwMismatch => !string.IsNullOrEmpty(_confirmPw) && _newPw != _confirmPw;
+
+    protected override async Task OnAfterRenderAsync(bool first)
+    {
+        if (!first) return;
+        _fullName = await Auth.GetFullNameAsync();
+        _role     = await Auth.GetRoleAsync();
+        _initials = string.Concat(_fullName.Split(' ').Take(2).Select(w => w.FirstOrDefault()));
+        _roleBadge = _role switch { "Admin" => "badge-admin", "Manager" => "badge-manager", _ => "badge-employee" };
+        StateHasChanged();
+    }
+
+    void SaveProfile() { _saved = true; }
+    void ChangePassword() { if (!_pwMismatch) { _pwSaved = true; _currentPw = _newPw = _confirmPw = ""; } }
+}

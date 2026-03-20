@@ -1,0 +1,142 @@
+@page "/admin/users"
+@inject ApiService Api
+@using LeaveFlow.BlazorUI.Services
+@using LeaveFlow.Domain.Enums
+
+<div class="lf-page-header">
+    <div class="lf-page-title">User Management</div>
+    <div class="lf-page-sub">Manage system users, roles and team assignments</div>
+</div>
+
+<div class="lf-card">
+    <div class="lf-card-header">
+        <div class="lf-card-title">All Users</div>
+        <button class="btn btn-primary btn-sm" @onclick="() => _showAdd = true">+ Add User</button>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="lf-spinner"><div class="lf-spinner-ring"></div></div>
+    }
+    else
+    {
+        <!-- Stats row -->
+        <div class="lf-stats" style="margin-bottom:20px">
+            <div class="lf-stat">
+                <div class="lf-stat-icon blue"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div>
+                <div><div class="lf-stat-val">@_users.Count</div><div class="lf-stat-label">Total Users</div></div>
+            </div>
+            <div class="lf-stat">
+                <div class="lf-stat-icon teal"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg></div>
+                <div><div class="lf-stat-val">@_users.Count(u => u.Role == UserRole.Employee)</div><div class="lf-stat-label">Employees</div></div>
+            </div>
+            <div class="lf-stat">
+                <div class="lf-stat-icon green"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg></div>
+                <div><div class="lf-stat-val">@_users.Count(u => u.Role == UserRole.Manager)</div><div class="lf-stat-label">Managers</div></div>
+            </div>
+            <div class="lf-stat">
+                <div class="lf-stat-icon yellow"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/></svg></div>
+                <div><div class="lf-stat-val">@_users.Count(u => u.Role == UserRole.Admin)</div><div class="lf-stat-label">Admins</div></div>
+            </div>
+        </div>
+
+        <div class="lf-table-wrap">
+            <table class="lf-table">
+                <thead>
+                    <tr><th>Name</th><th>Email</th><th>Role</th><th>Team</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var u in _users)
+                    {
+                        <tr>
+                            <td><strong>@u.FullName</strong></td>
+                            <td style="color:var(--gray-600)">@u.Email</td>
+                            <td>
+                                <span class="badge @RoleBadge(u.Role)">@u.Role</span>
+                            </td>
+                            <td style="color:var(--gray-400);font-size:12px">
+                                @(u.TeamId.HasValue ? $"Team {u.TeamId}" : "—")
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@if (_showAdd)
+{
+    <div class="lf-modal-backdrop" @onclick="() => _showAdd = false">
+        <div class="lf-modal" @onclick:stopPropagation>
+            <div class="lf-modal-title">Add New User</div>
+            <div class="lf-grid-2">
+                <div class="lf-form-group">
+                    <label class="lf-label">First Name</label>
+                    <input class="lf-input" @bind="_newFirst" placeholder="Jane" />
+                </div>
+                <div class="lf-form-group">
+                    <label class="lf-label">Last Name</label>
+                    <input class="lf-input" @bind="_newLast" placeholder="Smith" />
+                </div>
+            </div>
+            <div class="lf-form-group">
+                <label class="lf-label">Email</label>
+                <input class="lf-input" type="email" @bind="_newEmail" placeholder="jane@company.com" />
+            </div>
+            <div class="lf-grid-2">
+                <div class="lf-form-group">
+                    <label class="lf-label">Role</label>
+                    <select class="lf-select" @bind="_newRole">
+                        @foreach (var r in Enum.GetValues<UserRole>())
+                        { <option value="@r">@r</option> }
+                    </select>
+                </div>
+                <div class="lf-form-group">
+                    <label class="lf-label">Team ID</label>
+                    <input class="lf-input" type="number" @bind="_newTeamId" placeholder="1" />
+                </div>
+            </div>
+            <div class="lf-alert lf-alert-info" style="font-size:12px">
+                A temporary password will be emailed to the user on creation.
+            </div>
+            <div class="lf-modal-actions">
+                <button class="btn btn-secondary" @onclick="() => _showAdd = false">Cancel</button>
+                <button class="btn btn-primary">Create User</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    bool _loading = true, _showAdd;
+    string _newFirst = "", _newLast = "", _newEmail = "";
+    UserRole _newRole = UserRole.Employee;
+    int? _newTeamId;
+
+    // Placeholder user model for display — real data comes from GET /api/admin/users (future endpoint)
+    record UserRow(string FullName, string Email, UserRole Role, int? TeamId);
+    List<UserRow> _users = [];
+
+    protected override Task OnAfterRenderAsync(bool first)
+    {
+        if (!first) return Task.CompletedTask;
+        // Seed placeholder rows until GET /api/admin/users endpoint is added
+        _users =
+        [
+            new("Admin User",    "admin@leaveflow.com",    UserRole.Admin,    null),
+            new("Jane Manager",  "manager@leaveflow.com",  UserRole.Manager,  1),
+            new("John Employee", "employee@leaveflow.com", UserRole.Employee, 1),
+        ];
+        _loading = false;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    static string RoleBadge(UserRole r) => r switch
+    {
+        UserRole.Admin   => "badge-admin",
+        UserRole.Manager => "badge-manager",
+        _                => "badge-employee"
+    };
+}

@@ -1,0 +1,40 @@
+@inject NavigationManager Nav
+
+<div class="lf-topbar">
+    <span class="lf-topbar-title">@_pageTitle</span>
+    <div class="lf-topbar-right">
+        <div class="lf-user-info">
+            <div class="lf-user-name">@FullName</div>
+            <div class="lf-user-role">
+                <span class="badge @RoleBadge">@Role</span>
+            </div>
+        </div>
+        <div class="lf-avatar">@Initials</div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string FullName { get; set; } = "User";
+    [Parameter] public string Role     { get; set; } = "Employee";
+
+    string Initials => string.Concat(FullName.Split(' ').Take(2).Select(w => w.FirstOrDefault()));
+    string RoleBadge => Role switch { "Admin" => "badge-admin", "Manager" => "badge-manager", _ => "badge-employee" };
+
+    string _pageTitle = "Dashboard";
+
+    protected override void OnParametersSet()
+    {
+        var path = new Uri(Nav.Uri).AbsolutePath.ToLower();
+        _pageTitle = path switch
+        {
+            "/" or "/dashboard"   => "Dashboard",
+            "/my-leaves"          => "My Leaves",
+            "/create-leave"       => "Request Leave",
+            "/approvals"          => "Approvals",
+            "/admin/users"        => "User Management",
+            "/admin/audit-logs"   => "Audit Logs",
+            "/profile"            => "My Profile",
+            _                     => "LeaveFlow"
+        };
+    }
+}
