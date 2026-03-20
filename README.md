@@ -1,19 +1,20 @@
 # LeaveFlow Enterprise
 
-Production-grade HR Leave Management System built with **.NET 8**, **Clean Architecture**, **CQRS + MediatR**, and **ASP.NET Core Web API**.
+Production-grade HR Leave Management System built with **.NET 8**, **Clean Architecture**, **CQRS + MediatR**, **ASP.NET Core Web API**, and **Blazor Server UI**.
 
 ---
 
 ## Tech Stack
 
-| Layer          | Technology                              |
-|----------------|-----------------------------------------|
-| API            | ASP.NET Core 8 Web API                  |
-| Application    | MediatR (CQRS), FluentValidation        |
-| Domain         | Plain C# entities & enums               |
-| Infrastructure | EF Core 8 + SQL Server, MailKit, BCrypt |
-| Auth           | JWT Bearer (HS256)                      |
-| Logging        | Serilog                                 |
+| Layer          | Technology                                        |
+|----------------|---------------------------------------------------|
+| UI             | Blazor Server (.NET 8) — `https://localhost:5002` |
+| API            | ASP.NET Core 8 Web API — `https://localhost:5001` |
+| Application    | MediatR (CQRS), FluentValidation                  |
+| Domain         | Plain C# entities & enums — zero dependencies     |
+| Infrastructure | EF Core 8 + SQL Server, MailKit, BCrypt           |
+| Auth           | JWT Bearer (HS256) + Blazored.LocalStorage        |
+| Logging        | Serilog (console + rolling file)                  |
 
 ---
 
@@ -23,15 +24,27 @@ Production-grade HR Leave Management System built with **.NET 8**, **Clean Archi
 src/
 ├── LeaveFlow.API/            # Controllers, middleware, Program.cs
 ├── LeaveFlow.Application/    # CQRS handlers, DTOs, validators, interfaces
-├── LeaveFlow.Domain/         # Entities, enums (no dependencies)
-└── LeaveFlow.Infrastructure/ # EF Core DbContext, repositories, JWT, email
+├── LeaveFlow.Domain/         # Entities, enums (no external dependencies)
+├── LeaveFlow.Infrastructure/ # EF Core DbContext, repositories, JWT, email, BCrypt
+└── LeaveFlow.BlazorUI/       # Blazor Server UI — pages, layout, services, CSS
+    ├── Components/
+    │   ├── Layout/           # MainLayout, NavMenu, TopBar, EmptyLayout
+    │   └── Pages/            # Login, Dashboard, MyLeaves, CreateLeave,
+    │       └── Admin/        # Approvals, Profile, AuditLogs, Users
+    ├── Services/             # ApiService (HttpClient), AuthService (JWT storage)
+    └── wwwroot/app.css       # Full design system — blue/teal theme
 ```
 
-**Dependency flow:** API → Application + Infrastructure → Domain
+**Dependency flow:** BlazorUI → API (HTTP) | API → Application + Infrastructure → Domain
 
 ---
 
 ## Quick Start
+
+### Prerequisites
+- .NET 8 SDK
+- SQL Server / LocalDB
+- `dotnet tool install --global dotnet-ef`
 
 ### 1. Configure
 
@@ -76,55 +89,78 @@ dotnet run
 # Swagger: https://localhost:5001/swagger
 ```
 
+### 4. Run Blazor UI
+
+```bash
+cd src/LeaveFlow.BlazorUI
+dotnet run
+# UI: https://localhost:5002
+```
+
 ---
 
 ## API Endpoints
 
-| Method | Route                          | Role            | Description              |
-|--------|--------------------------------|-----------------|--------------------------|
-| POST   | /api/auth/login                | Public          | Login, returns JWT       |
-| GET    | /api/leaverequests/my          | Employee+       | My leave requests        |
-| GET    | /api/leaverequests/balances    | Employee+       | My leave balances        |
-| POST   | /api/leaverequests             | Employee+       | Submit leave request     |
-| PUT    | /api/leaverequests/{id}/cancel | Employee+       | Cancel pending request   |
-| GET    | /api/leaverequests/pending     | Manager, Admin  | Team pending requests    |
-| PUT    | /api/leaverequests/{id}/review | Manager, Admin  | Approve or reject        |
-| GET    | /api/admin/auditlogs           | Admin           | Paginated audit logs     |
+| Method | Route                          | Role           | Description            |
+|--------|--------------------------------|----------------|------------------------|
+| POST   | /api/auth/login                | Public         | Login, returns JWT     |
+| GET    | /api/leaverequests/my          | Employee+      | My leave requests      |
+| GET    | /api/leaverequests/balances    | Employee+      | My leave balances      |
+| POST   | /api/leaverequests             | Employee+      | Submit leave request   |
+| PUT    | /api/leaverequests/{id}/cancel | Employee+      | Cancel pending request |
+| GET    | /api/leaverequests/pending     | Manager, Admin | Team pending requests  |
+| PUT    | /api/leaverequests/{id}/review | Manager, Admin | Approve or reject      |
+| GET    | /api/admin/auditlogs           | Admin          | Paginated audit logs   |
 
 All protected routes require `Authorization: Bearer <token>` header.
-
 Write endpoints accept an optional `Idempotency-Key` header to prevent duplicate submissions.
+
+---
+
+## Blazor UI Pages
+
+| Route               | Page            | Roles          |
+|---------------------|-----------------|----------------|
+| `/login`            | Login           | Public         |
+| `/`                 | Dashboard       | All            |
+| `/my-leaves`        | My Leaves       | All            |
+| `/create-leave`     | Request Leave   | All            |
+| `/approvals`        | Approvals       | Manager, Admin |
+| `/admin/users`      | User Management | Admin          |
+| `/admin/audit-logs` | Audit Logs      | Admin          |
+| `/profile`          | My Profile      | All            |
 
 ---
 
 ## Roles & Permissions
 
-| Role     | Permissions                                              |
-|----------|----------------------------------------------------------|
-| Employee | Submit, view, cancel own requests; view own balances     |
-| Manager  | All Employee permissions + review team requests          |
-| Admin    | All Manager permissions + audit logs + user management   |
+| Role     | Permissions                                            |
+|----------|--------------------------------------------------------|
+| Employee | Submit, view, cancel own requests; view own balances   |
+| Manager  | All Employee permissions + review team requests        |
+| Admin    | All Manager permissions + audit logs + user management |
 
 ---
 
 ## Architecture
 
 ```
-Request → Controller → MediatR Command/Query
-                            ↓
-                       Handler (Application)
-                            ↓
-                    Domain rules enforced
-                            ↓
-                  Repository (Infrastructure)
-                            ↓
-                       EF Core → SQL Server
+Blazor UI (https://localhost:5002)
+    ↓  HTTP + Bearer JWT
+API Controllers (https://localhost:5001)
+    ↓  MediatR
+Application Layer — CQRS Handlers
+    ↓  Interfaces
+Infrastructure Layer — EF Core, JWT, Email, BCrypt
+    ↓
+SQL Server (LeaveFlowDB)
 ```
 
-- **CQRS**: Commands mutate state; Queries read state — separate handler classes
-- **Repository + Unit of Work**: All DB access abstracted; `SaveChangesAsync` called once per command
-- **Result<T>**: Typed success/failure wrapper — no exceptions for business errors
-- **Idempotency**: `Idempotency-Key` header checked before processing write commands
+- **CQRS** — Commands mutate state; Queries read state — separate handler classes
+- **Repository + Unit of Work** — All DB access abstracted; one `SaveChangesAsync` per command
+- **Result\<T\>** — Typed success/failure wrapper — no exceptions for business errors
+- **Idempotency** — `Idempotency-Key` header checked before processing write commands
+- **Auth Guard** — `MainLayout.razor` checks JWT on every render; redirects to `/login` if expired
 
 ---
 
@@ -144,16 +180,19 @@ Request → Controller → MediatR Command/Query
 
 ## Deployment
 
-- **API**: Azure App Service or IIS
-- **Database**: Azure SQL / SQL Server
-- **CI/CD**: GitHub Actions — `dotnet build` → `dotnet test` → publish
+| Component  | Target                                    |
+|------------|-------------------------------------------|
+| API        | Azure App Service / IIS                   |
+| Blazor UI  | Azure App Service (Server-side rendering) |
+| Database   | Azure SQL / SQL Server                    |
+| CI/CD      | GitHub Actions — build → test → publish   |
 
 ---
 
 ## Future Enhancements
 
-- Blazor UI frontend
 - Refresh token rotation
 - SMS notifications (Twilio)
 - Advanced reporting dashboard
 - Mobile app (MAUI)
+- bUnit UI tests
