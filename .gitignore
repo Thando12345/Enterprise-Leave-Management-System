@@ -1,0 +1,51 @@
+## .NET / C# gitignore
+
+# Build outputs
+bin/
+obj/
+out/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider
+.idea/
+
+# VS Code
+.vscode/
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Logs
+logs/
+*.log
+
+# Secrets / config overrides
+appsettings.Development.json
+appsettings.Local.json
+secrets.json
+
+# EF Core migrations snapshot (keep Migrations folder, ignore snapshots if desired)
+# Uncomment below only if you want to exclude migration snapshots:
+# **/Migrations/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test results
+TestResults/
+coverage/
+*.trx
+*.coveragexml
